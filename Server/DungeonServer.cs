@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VibeMUC.Map;
 using VibeMUC.Network;
+using System.Linq;
 
 namespace VibeMUC.Server
 {
@@ -14,6 +15,7 @@ namespace VibeMUC.Server
         private TcpListener? _listener;
         private readonly List<ClientConnection> _clients = new();
         private readonly Dictionary<int, DungeonMapData> _maps = new();
+        private int _currentMapId = -1;
         private bool _isRunning;
         private readonly object _clientLock = new();
 
@@ -21,11 +23,43 @@ namespace VibeMUC.Server
         public event Action<ClientConnection>? OnClientDisconnected;
         public event Action<Exception>? OnError;
 
+        public int CurrentMapId
+        {
+            get => _currentMapId;
+            set
+            {
+                if (_maps.ContainsKey(value))
+                {
+                    _currentMapId = value;
+                }
+                else
+                {
+                    throw new ArgumentException($"Map with ID {value} does not exist.");
+                }
+            }
+        }
+
+        public DungeonMapData? CurrentMap => _currentMapId >= 0 ? GetMap(_currentMapId) : null;
+
         public async Task StartAsync(int port = NetworkConstants.DefaultPort)
         {
             _listener = new TcpListener(IPAddress.Any, port);
             _listener.Start();
             _isRunning = true;
+
+            // Create initial test map
+            if (_maps.Count == 0)
+            {
+                var initialMap = CreateTestMap();
+                int mapId = GetNextMapId();
+                AddMap(mapId, initialMap);
+                Console.WriteLine($"Created initial test map with ID: {mapId}");
+                
+                // Display the map
+                var generator = new DungeonMapGenerator(initialMap.Width, initialMap.Height);
+                generator.LoadFromMapData(initialMap);
+                generator.PrintColoredAscii();
+            }
 
             Console.WriteLine($"Server started on port {port}");
 
@@ -131,9 +165,24 @@ namespace VibeMUC.Server
 
         private async Task HandleMapRequestAsync(ClientConnection client, NetworkMessage message)
         {
-            Console.WriteLine($"Creating test map for client {client.Id}");
-            var mapData = CreateTestMap();
-            Console.WriteLine($"Created test map: {mapData.Width}x{mapData.Height}, {mapData.Cells.Length} cells");
+            Console.WriteLine($"Handling map request from client {client.Id}");
+            
+            // Send the current map if one exists, otherwise create a new one
+            DungeonMapData mapData;
+            if (CurrentMap != null)
+            {
+                mapData = CurrentMap;
+                Console.WriteLine($"Sending existing map (ID: {_currentMapId}) to client {client.Id}");
+            }
+            else
+            {
+                Console.WriteLine($"No current map exists, creating new map for client {client.Id}");
+                mapData = CreateTestMap();
+                int mapId = GetNextMapId();
+                AddMap(mapId, mapData);
+                CurrentMapId = mapId;
+                Console.WriteLine($"Created new map with ID: {mapId}");
+            }
             
             try 
             {
@@ -152,8 +201,7 @@ namespace VibeMUC.Server
         {
             Console.WriteLine("Serializing map data...");
             var jsonData = mapData.ToJson();
-            Console.WriteLine($"Map serialized to JSON (length: {jsonData.Length} bytes)");
-            Console.WriteLine($"JSON content: {jsonData}");
+            Console.WriteLine($"Map serialized (length: {jsonData.Length} bytes)");
 
             var message = new NetworkMessage
             {
@@ -167,38 +215,105 @@ namespace VibeMUC.Server
 
         private DungeonMapData CreateTestMap()
         {
-            const string mapName = "Test Dungeon";
             const int width = 10;
             const int height = 10;
+            const int roomSize = 5;
             
+            // Calculate room position (centered)
+            int roomX = (width - roomSize) / 2;  // Should be 2
+            int roomY = (height - roomSize) / 2; // Should be 2
+
             var cells = new CellData[width * height];
+
+            // Initialize all cells as empty (non-existent)
             for (int i = 0; i < cells.Length; i++)
             {
-                cells[i] = new CellData
+                cells[i] = new CellData { IsEmpty = true, IsPassable = false };
+            }
+
+            // Create the room
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
                 {
-                    IsPassable = true,
-                    HasNorthWall = i / width == height - 1,
-                    HasSouthWall = i / width == 0,
-                    HasEastWall = i % width == width - 1,
-                    HasWestWall = i % width == 0
-                };
+                    int index = y * width + x;
+                    bool isInRoom = x >= roomX && x < roomX + roomSize &&
+                                  y >= roomY && y < roomY + roomSize;
+
+                    if (isInRoom)
+                    {
+                        cells[index].IsEmpty = false;
+                        cells[index].IsPassable = true;
+
+                        // Add walls on room edges
+                        bool isNorthEdge = y == roomY;
+                        bool isSouthEdge = y == roomY + roomSize - 1;
+                        bool isWestEdge = x == roomX;
+                        bool isEastEdge = x == roomX + roomSize - 1;
+
+                        cells[index].HasNorthWall = isNorthEdge;
+                        cells[index].HasSouthWall = isSouthEdge;
+                        cells[index].HasWestWall = isWestEdge;
+                        cells[index].HasEastWall = isEastEdge;
+
+                        // Add north door in the center of the north wall
+                        if (isNorthEdge && x == roomX + roomSize / 2)
+                        {
+                            cells[index].HasNorthDoor = true;
+                        }
+
+                        // Add south door in the center of the south wall
+                        if (isSouthEdge && x == roomX + roomSize / 2)
+                        {
+                            cells[index].HasSouthDoor = true;
+                        }
+
+                        // Add east door in the center of the east wall
+                        if (isEastEdge && y == roomY + roomSize / 2)
+                        {
+                            cells[index].HasEastDoor = true;
+                        }
+
+                        // Add west door in the center of the west wall
+                        if (isWestEdge && y == roomY + roomSize / 2)
+                        {
+                            cells[index].HasWestDoor = true;
+                        }
+                    }
+                }
             }
 
             var map = new DungeonMapData
             {
                 Width = width,
                 Height = height,
-                MapName = mapName,
+                MapName = "Test Room",
                 FloorLevel = 1,
                 Cells = cells
             };
 
+            // Create ASCII preview for verification
+            var generator = new DungeonMapGenerator(width, height);
+            generator.LoadFromMapData(map);
+            generator.PrintColoredAscii();
+
             return map;
+        }
+
+        public int GetNextMapId()
+        {
+            if (_maps.Count == 0) return 1;
+            return _maps.Keys.Max() + 1;
         }
 
         public void AddMap(int id, DungeonMapData map)
         {
             _maps[id] = map;
+            // If this is the first map added, make it the current map
+            if (_currentMapId < 0)
+            {
+                _currentMapId = id;
+            }
         }
 
         public DungeonMapData? GetMap(int id)
@@ -229,8 +344,6 @@ namespace VibeMUC.Server
             {
                 await _sendLock.WaitAsync();
                 
-                Console.WriteLine($"Sending message type: {message.Type}, Payload length: {message.Payload.Length}");
-                
                 // Write message type
                 await _stream.WriteAsync(new[] { (byte)message.Type }, 0, 1);
                 
@@ -243,7 +356,6 @@ namespace VibeMUC.Server
                 
                 // Ensure data is sent immediately
                 await _stream.FlushAsync();
-                Console.WriteLine("Message sent and flushed to network stream");
             }
             catch (Exception ex)
             {
@@ -262,19 +374,15 @@ namespace VibeMUC.Server
             {
                 // Read message type
                 var typeBuffer = new byte[1];
-                Console.WriteLine("Reading message type...");
                 var bytesRead = await _stream.ReadAsync(typeBuffer, 0, 1);
                 if (bytesRead == 0)
                 {
                     Console.WriteLine("Client disconnected (0 bytes read for message type)");
                     return null;
                 }
-                Console.WriteLine($"Raw message type value: {typeBuffer[0]}");
-                Console.WriteLine($"Message type enum value: {(MessageType)typeBuffer[0]}");
 
                 // Read payload length
                 var lengthBuffer = new byte[sizeof(int)];
-                Console.WriteLine("Reading payload length...");
                 bytesRead = await _stream.ReadAsync(lengthBuffer, 0, sizeof(int));
                 if (bytesRead == 0)
                 {
@@ -283,7 +391,6 @@ namespace VibeMUC.Server
                 }
 
                 var payloadLength = BitConverter.ToInt32(lengthBuffer, 0);
-                Console.WriteLine($"Expected payload length: {payloadLength} bytes");
                 
                 if (payloadLength > NetworkConstants.MaxMessageSize)
                 {
@@ -296,34 +403,28 @@ namespace VibeMUC.Server
                 {
                     // Read payload only if there are bytes to read
                     payload = new byte[payloadLength];
-                    Console.WriteLine("Reading payload...");
                     bytesRead = await _stream.ReadAsync(payload, 0, payloadLength);
                     if (bytesRead == 0)
                     {
                         Console.WriteLine("Client disconnected (0 bytes read for payload)");
                         return null;
                     }
-                    Console.WriteLine($"Read {bytesRead} bytes of payload data");
                 }
                 else
                 {
                     // For zero-length payloads, use an empty array
                     payload = Array.Empty<byte>();
-                    Console.WriteLine("Message has no payload");
                 }
 
-                var message = new NetworkMessage
+                return new NetworkMessage
                 {
                     Type = (MessageType)typeBuffer[0],
                     Payload = payload
                 };
-
-                Console.WriteLine($"Successfully received message - Type: {message.Type}, Payload: {message.Payload.Length} bytes");
-                return message;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error receiving message: {ex.Message}\nStack trace: {ex.StackTrace}");
+                Console.WriteLine($"Error receiving message: {ex.Message}");
                 return null;
             }
         }

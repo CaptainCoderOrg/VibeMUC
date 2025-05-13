@@ -80,6 +80,9 @@ namespace VibeMUC.Map
     {
         // Basic properties
         [JsonProperty]
+        public bool IsEmpty { get; set; }
+
+        [JsonProperty]
         public bool IsPassable { get; set; } = true;
 
         // Wall configuration
@@ -95,6 +98,19 @@ namespace VibeMUC.Map
         [JsonProperty]
         public bool HasWestWall { get; set; }
 
+        // Door configuration
+        [JsonProperty]
+        public bool HasNorthDoor { get; set; }
+        
+        [JsonProperty]
+        public bool HasEastDoor { get; set; }
+        
+        [JsonProperty]
+        public bool HasSouthDoor { get; set; }
+        
+        [JsonProperty]
+        public bool HasWestDoor { get; set; }
+
         // Optional properties that might be needed for different cell types
         [JsonProperty]
         public string CellType { get; set; } = "Default";
@@ -105,6 +121,7 @@ namespace VibeMUC.Map
         public CellData()
         {
             Properties = new Dictionary<string, string>();
+            IsEmpty = false;
         }
 
         // Helper to quickly set all walls

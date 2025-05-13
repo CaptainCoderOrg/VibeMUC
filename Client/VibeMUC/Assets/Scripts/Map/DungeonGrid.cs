@@ -45,8 +45,11 @@ namespace VibeMUC.Map
                     cell.GridPosition = new Vector2Int(x, y);
                     _grid[x, y] = cell;
 
-                    // Initialize with no walls
+                    // Initialize as empty/non-existent cell
+                    cell.IsEmpty = true;
+                    cell.IsPassable = false;
                     cell.SetWalls(false, false, false, false);
+                    cell.SetDoors(false, false, false, false);
                 }
             }
         }
@@ -109,6 +112,61 @@ namespace VibeMUC.Map
                 cell1.HasSouthWall = hasWall;
                 cell2.HasNorthWall = hasWall;
             }
+        }
+
+        // Add or remove a door between two adjacent cells
+        public void SetDoorBetweenCells(Vector2Int pos1, Vector2Int pos2, bool hasDoor)
+        {
+            Cell cell1 = GetCell(pos1);
+            Cell cell2 = GetCell(pos2);
+
+            if (cell1 == null || cell2 == null)
+                return;
+
+            // Determine the relative position of cell2 to cell1
+            Vector2Int diff = pos2 - pos1;
+            
+            if (diff.x == 1 && diff.y == 0) // cell2 is east of cell1
+            {
+                cell1.HasEastDoor = hasDoor;
+                cell2.HasWestDoor = hasDoor;
+            }
+            else if (diff.x == -1 && diff.y == 0) // cell2 is west of cell1
+            {
+                cell1.HasWestDoor = hasDoor;
+                cell2.HasEastDoor = hasDoor;
+            }
+            else if (diff.x == 0 && diff.y == 1) // cell2 is north of cell1
+            {
+                cell1.HasNorthDoor = hasDoor;
+                cell2.HasSouthDoor = hasDoor;
+            }
+            else if (diff.x == 0 && diff.y == -1) // cell2 is south of cell1
+            {
+                cell1.HasSouthDoor = hasDoor;
+                cell2.HasNorthDoor = hasDoor;
+            }
+        }
+
+        // Check if there's a door between two adjacent cells
+        public bool HasDoorBetween(Vector2Int pos1, Vector2Int pos2)
+        {
+            Cell cell1 = GetCell(pos1);
+            Cell cell2 = GetCell(pos2);
+
+            if (cell1 == null || cell2 == null)
+                return false; // No door between invalid cells
+
+            Vector2Int diff = pos2 - pos1;
+            
+            return diff switch
+            {
+                { x: 1, y: 0 } => cell1.HasEastDoor || cell2.HasWestDoor,
+                { x: -1, y: 0 } => cell1.HasWestDoor || cell2.HasEastDoor,
+                { x: 0, y: 1 } => cell1.HasNorthDoor || cell2.HasSouthDoor,
+                { x: 0, y: -1 } => cell1.HasSouthDoor || cell2.HasNorthDoor,
+                _ => false // Non-adjacent cells can't have doors
+            };
         }
 
         // Check if there's a wall between two adjacent cells

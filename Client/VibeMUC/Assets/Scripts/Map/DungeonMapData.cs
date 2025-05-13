@@ -87,11 +87,16 @@ namespace VibeMUC.Map
                     {
                         mapData.SetCell(x, y, new CellData
                         {
+                            IsEmpty = cell.IsEmpty,
                             IsPassable = cell.IsPassable,
                             HasNorthWall = cell.HasNorthWall,
                             HasEastWall = cell.HasEastWall,
                             HasSouthWall = cell.HasSouthWall,
-                            HasWestWall = cell.HasWestWall
+                            HasWestWall = cell.HasWestWall,
+                            HasNorthDoor = cell.HasNorthDoor,
+                            HasEastDoor = cell.HasEastDoor,
+                            HasSouthDoor = cell.HasSouthDoor,
+                            HasWestDoor = cell.HasWestDoor
                         });
                     }
                 }
@@ -121,14 +126,33 @@ namespace VibeMUC.Map
                         Cell cell = grid.GetCell(x, y);
                         if (cell != null)
                         {
+                            // Set basic properties
+                            cell.IsEmpty = cellData.IsEmpty;
                             cell.IsPassable = cellData.IsPassable;
+                            cell.IsVisible = true;  // Make cells visible initially
+                            cell.IsExplored = true; // Mark as explored
+
+                            // First set walls - Unity's coordinate system is different from the grid
+                            // Unity: +Z is forward (North), -Z is back (South)
+                            // Grid: +Y is North, -Y is South
                             cell.SetWalls(
-                                cellData.HasNorthWall,
-                                cellData.HasEastWall,
-                                cellData.HasSouthWall,
-                                cellData.HasWestWall
+                                north: cellData.HasSouthWall,  // Unity North = Grid South
+                                east: cellData.HasEastWall,    // East stays the same
+                                south: cellData.HasNorthWall,  // Unity South = Grid North
+                                west: cellData.HasWestWall     // West stays the same
                             );
-                            Debug.Log($"Updated cell {x},{y}: passable={cellData.IsPassable}, walls={cellData.HasNorthWall},{cellData.HasEastWall},{cellData.HasSouthWall},{cellData.HasWestWall}");
+
+                            // Then set doors - using the same coordinate system conversion
+                            cell.SetDoors(
+                                north: cellData.HasSouthDoor,  // Unity North = Grid South
+                                east: cellData.HasEastDoor,    // East stays the same
+                                south: cellData.HasNorthDoor,  // Unity South = Grid North
+                                west: cellData.HasWestDoor     // West stays the same
+                            );
+
+                            Debug.Log($"Cell {x},{y} updated: " +
+                                    $"walls(N,E,S,W)={cell.HasNorthWall},{cell.HasEastWall},{cell.HasSouthWall},{cell.HasWestWall} " +
+                                    $"doors(N,E,S,W)={cell.HasNorthDoor},{cell.HasEastDoor},{cell.HasSouthDoor},{cell.HasWestDoor}");
                         }
                     }
                 }
@@ -143,6 +167,9 @@ namespace VibeMUC.Map
     public class CellData
     {
         // Basic properties
+        [JsonProperty]
+        public bool IsEmpty { get; set; }
+
         [JsonProperty]
         public bool IsPassable { get; set; } = true;
 
@@ -159,6 +186,19 @@ namespace VibeMUC.Map
         [JsonProperty]
         public bool HasWestWall { get; set; }
 
+        // Door configuration
+        [JsonProperty]
+        public bool HasNorthDoor { get; set; }
+        
+        [JsonProperty]
+        public bool HasEastDoor { get; set; }
+        
+        [JsonProperty]
+        public bool HasSouthDoor { get; set; }
+        
+        [JsonProperty]
+        public bool HasWestDoor { get; set; }
+
         // Optional properties that might be needed for different cell types
         [JsonProperty]
         public string CellType { get; set; } = "Default";
@@ -169,6 +209,7 @@ namespace VibeMUC.Map
         public CellData()
         {
             Properties = new Dictionary<string, string>();
+            IsEmpty = false;
         }
 
         // Helper to quickly set all walls
@@ -178,6 +219,15 @@ namespace VibeMUC.Map
             HasEastWall = east;
             HasSouthWall = south;
             HasWestWall = west;
+        }
+
+        // Helper to quickly set all doors
+        public void SetDoors(bool north, bool east, bool south, bool west)
+        {
+            HasNorthDoor = north;
+            HasEastDoor = east;
+            HasSouthDoor = south;
+            HasWestDoor = west;
         }
     }
 } 

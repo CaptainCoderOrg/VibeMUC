@@ -79,6 +79,8 @@ namespace VibeMUC.Server
             Console.WriteLine("  clients  - List connected clients");
             Console.WriteLine("  maps     - List loaded maps");
             Console.WriteLine("  newmap   - Create a new test map");
+            Console.WriteLine("  genmap   - Generate a new map with parameters (genmap [width] [height] [minRooms] [maxRooms] [seed])");
+            Console.WriteLine("  showmap  - Display the current map in ASCII format");
             Console.WriteLine("  exit     - Stop server and exit");
             Console.WriteLine();
 
@@ -86,8 +88,9 @@ namespace VibeMUC.Server
             {
                 Console.Write("> ");
                 string? command = Console.ReadLine()?.ToLower().Trim();
+                string[] args = command?.Split(' ') ?? Array.Empty<string>();
 
-                switch (command)
+                switch (args[0])
                 {
                     case "help":
                         Console.WriteLine("\nAvailable commands:");
@@ -95,6 +98,8 @@ namespace VibeMUC.Server
                         Console.WriteLine("  clients  - List connected clients");
                         Console.WriteLine("  maps     - List loaded maps");
                         Console.WriteLine("  newmap   - Create a new test map");
+                        Console.WriteLine("  genmap   - Generate a new map with parameters (genmap [width] [height] [minRooms] [maxRooms] [seed])");
+                        Console.WriteLine("  showmap  - Display the current map in ASCII format");
                         Console.WriteLine("  exit     - Stop server and exit");
                         break;
 
@@ -122,13 +127,75 @@ namespace VibeMUC.Server
                         }
                         break;
 
+                    case "genmap":
+                        if (_server != null)
+                        {
+                            try
+                            {
+                                // Parse parameters with defaults
+                                int width = args.Length > 1 && int.TryParse(args[1], out int w) ? w : 30;
+                                int height = args.Length > 2 && int.TryParse(args[2], out int h) ? h : 30;
+                                int minRooms = args.Length > 3 && int.TryParse(args[3], out int min) ? min : 5;
+                                int maxRooms = args.Length > 4 && int.TryParse(args[4], out int max) ? max : 8;
+                                int? seed = args.Length > 5 && int.TryParse(args[5], out int s) ? s : null;
+
+                                // Validate parameters
+                                if (width < 10 || height < 10)
+                                {
+                                    Console.WriteLine("Width and height must be at least 10");
+                                    break;
+                                }
+                                if (minRooms < 1 || maxRooms < minRooms)
+                                {
+                                    Console.WriteLine("Invalid room count parameters");
+                                    break;
+                                }
+
+                                // Generate the map
+                                var generator = new DungeonMapGenerator(width, height, seed);
+                                var mapData = generator.Generate(minRooms, maxRooms);
+                                
+                                // Find next available map ID
+                                int mapId = _server.GetNextMapId();
+                                _server.AddMap(mapId, mapData);
+                                _server.CurrentMapId = mapId;  // Set as current map
+                                
+                                Console.WriteLine($"Generated new map with ID: {mapId} (Current Map)");
+                                Console.WriteLine($"Parameters: {width}x{height}, Rooms: {minRooms}-{maxRooms}" + 
+                                                (seed.HasValue ? $", Seed: {seed}" : ""));
+                                Console.WriteLine();
+
+                                // Display colored ASCII map
+                                generator.PrintColoredAscii();
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Error generating map: {ex.Message}");
+                            }
+                        }
+                        break;
+
+                    case "showmap":
+                        if (_server?.CurrentMap != null)
+                        {
+                            var generator = new DungeonMapGenerator(_server.CurrentMap.Width, _server.CurrentMap.Height);
+                            generator.LoadFromMapData(_server.CurrentMap);
+                            Console.WriteLine($"\nCurrent Map (ID: {_server.CurrentMapId}):");
+                            generator.PrintColoredAscii();
+                        }
+                        else
+                        {
+                            Console.WriteLine("No current map exists. Use 'genmap' or 'newmap' to create one.");
+                        }
+                        break;
+
                     case "":
                         break;
 
                     default:
-                        if (!string.IsNullOrEmpty(command))
+                        if (!string.IsNullOrEmpty(args[0]))
                         {
-                            Console.WriteLine($"Unknown command: {command}");
+                            Console.WriteLine($"Unknown command: {args[0]}");
                             Console.WriteLine("Type 'help' for available commands");
                         }
                         break;
@@ -169,7 +236,10 @@ namespace VibeMUC.Server
                     HasNorthWall = y < height - 1 && (isEdge || (y == 7 && (isRoom1 || isRoom2))),
                     HasSouthWall = y > 0 && (isEdge || (y == 3 && (isRoom1 || isRoom2))),
                     HasEastWall = x < width - 1 && (isEdge || (x == 7 && !isCorridor) || (x == 13 && isRoom2)),
-                    HasWestWall = x > 0 && (isEdge || (x == 3 && isRoom1) || (x == 9 && !isCorridor))
+                    HasWestWall = x > 0 && (isEdge || (x == 3 && isRoom1) || (x == 9 && !isCorridor)),
+                    // Add doors at the corridor entrances
+                    HasEastDoor = x == 7 && y == 5,
+                    HasWestDoor = x == 9 && y == 5
                 };
             }
 
