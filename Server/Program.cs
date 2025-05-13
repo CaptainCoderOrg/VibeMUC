@@ -164,9 +164,6 @@ namespace VibeMUC.Server
                                 Console.WriteLine($"Parameters: {width}x{height}, Rooms: {minRooms}-{maxRooms}" + 
                                                 (seed.HasValue ? $", Seed: {seed}" : ""));
                                 Console.WriteLine();
-
-                                // Display colored ASCII map
-                                generator.PrintColoredAscii();
                             }
                             catch (Exception ex)
                             {
@@ -178,14 +175,13 @@ namespace VibeMUC.Server
                     case "showmap":
                         if (_server?.CurrentMap != null)
                         {
-                            var generator = new DungeonMapGenerator(_server.CurrentMap.Width, _server.CurrentMap.Height);
-                            generator.LoadFromMapData(_server.CurrentMap);
-                            Console.WriteLine($"\nCurrent Map (ID: {_server.CurrentMapId}):");
-                            generator.PrintColoredAscii();
+                            var renderer = new DungeonAsciiRenderer();
+                            string ascii = renderer.Render(_server.CurrentMap);
+                            Console.WriteLine(ascii);
                         }
                         else
                         {
-                            Console.WriteLine("No current map exists. Use 'genmap' or 'newmap' to create one.");
+                            Console.WriteLine("No current map available.");
                         }
                         break;
 

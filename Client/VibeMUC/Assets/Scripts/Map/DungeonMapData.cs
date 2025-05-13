@@ -136,17 +136,17 @@ namespace VibeMUC.Map
                             // Unity: +Z is forward (North), -Z is back (South)
                             // Grid: +Y is North, -Y is South
                             cell.SetWalls(
-                                north: cellData.HasSouthWall,  // Unity North = Grid South
+                                north: cellData.HasNorthWall,  // Unity North = Grid North
                                 east: cellData.HasEastWall,    // East stays the same
-                                south: cellData.HasNorthWall,  // Unity South = Grid North
+                                south: cellData.HasSouthWall,  // Unity South = Grid South
                                 west: cellData.HasWestWall     // West stays the same
                             );
 
                             // Then set doors - using the same coordinate system conversion
                             cell.SetDoors(
-                                north: cellData.HasSouthDoor,  // Unity North = Grid South
+                                north: cellData.HasNorthDoor,  // Unity North = Grid North
                                 east: cellData.HasEastDoor,    // East stays the same
-                                south: cellData.HasNorthDoor,  // Unity South = Grid North
+                                south: cellData.HasSouthDoor,  // Unity South = Grid South
                                 west: cellData.HasWestDoor     // West stays the same
                             );
 

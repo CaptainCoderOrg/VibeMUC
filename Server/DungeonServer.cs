@@ -54,11 +54,6 @@ namespace VibeMUC.Server
                 int mapId = GetNextMapId();
                 AddMap(mapId, initialMap);
                 Console.WriteLine($"Created initial test map with ID: {mapId}");
-                
-                // Display the map
-                var generator = new DungeonMapGenerator(initialMap.Width, initialMap.Height);
-                generator.LoadFromMapData(initialMap);
-                generator.PrintColoredAscii();
             }
 
             Console.WriteLine($"Server started on port {port}");
@@ -246,8 +241,8 @@ namespace VibeMUC.Server
                         cells[index].IsPassable = true;
 
                         // Add walls on room edges
-                        bool isNorthEdge = y == roomY;
-                        bool isSouthEdge = y == roomY + roomSize - 1;
+                        bool isNorthEdge = y == roomY + roomSize - 1;  // North is at higher Y
+                        bool isSouthEdge = y == roomY;                 // South is at lower Y
                         bool isWestEdge = x == roomX;
                         bool isEastEdge = x == roomX + roomSize - 1;
 
@@ -291,11 +286,6 @@ namespace VibeMUC.Server
                 FloorLevel = 1,
                 Cells = cells
             };
-
-            // Create ASCII preview for verification
-            var generator = new DungeonMapGenerator(width, height);
-            generator.LoadFromMapData(map);
-            generator.PrintColoredAscii();
 
             return map;
         }
