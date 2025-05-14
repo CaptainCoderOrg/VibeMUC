@@ -27,9 +27,7 @@ namespace VibeMUC.Map
         private const string DARK_GREY = "\u001b[38;5;240m";  // Wall color
         private const string WHITE = "\u001b[37m";  // Floor color
 
-        private string ColoredWall(char c) => $"{DARK_GREY}{c}{RESET}";
-        private string ColoredDoor(char c) => $"{BROWN}{c}{RESET}";
-        private string ColoredFloor(char c) => $"{WHITE}{c}{RESET}";
+        private record ColoredChar(char Char, string? Color = null);
 
         /// <summary>
         /// Converts a DungeonMapData to an ASCII string representation.
@@ -43,233 +41,151 @@ namespace VibeMUC.Map
             if (map.Cells == null || map.Cells.Length != map.Width * map.Height)
                 throw new ArgumentException("Invalid cell data");
 
-            var sb = new StringBuilder();
+            // Calculate dimensions for the ASCII grid
+            // Each cell is 3x2 characters (including walls)
+            int gridWidth = map.Width * 3;
+            int gridHeight = map.Height * 2;
+            var grid = new ColoredChar[gridHeight, gridWidth];
 
+            // Initialize grid with empty spaces
+            for (int y = 0; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    grid[y, x] = new ColoredChar(EMPTY);
+                }
+            }
+
+            // Render each cell
+            for (int mapY = 0; mapY < map.Height; mapY++)
+            {
+                for (int mapX = 0; mapX < map.Width; mapX++)
+                {
+                    var cell = map.GetCell(mapX, mapY);
+                    if (cell != null && !cell.IsEmpty)
+                    {
+                        RenderCell(grid, mapX, mapY, cell);
+                    }
+                }
+            }
+
+            // Convert grid to string
+            var sb = new StringBuilder();
+            
             // Add map header
             sb.AppendLine($"Map: {map.MapName} ({map.Width}x{map.Height})");
-            sb.AppendLine(new string('=', map.Width * 2));
+            sb.AppendLine(new string('=', map.Width * 3));
             sb.AppendLine();
 
-            // Render each row from bottom to top to match game coordinates
-            for (int y = map.Height - 1; y >= 0; y--)
+            // Convert grid to string, rendering from top to bottom
+            for (int y = gridHeight - 1; y >= 0; y--)
             {
-                RenderRow(map, y, sb);
-                
-                // Only add vertical spacing if this isn't the bottom of a room section
-                if (y > 0 && !HasSouthWallInRow(map, y))
+                for (int x = 0; x < gridWidth; x++)
                 {
-                    var spacerLine = new StringBuilder();
-                    for (int x = 0; x < map.Width; x++)
+                    var coloredChar = grid[y, x];
+                    if (coloredChar.Color != null)
                     {
-                        var cell = map.GetCell(x, y);
-                        var leftCell = x > 0 ? map.GetCell(x - 1, y) : null;
-                        var rightCell = x < map.Width - 1 ? map.GetCell(x + 1, y) : null;
-
-                        if (cell != null && !cell.IsEmpty)
-                        {
-                            bool hasWestWall = cell.HasWestWall || (leftCell == null || leftCell.IsEmpty);
-                            if (hasWestWall)
-                            {
-                                spacerLine.Append(ColoredWall(WALL_VERTICAL));
-                            }
-                            else
-                            {
-                                spacerLine.Append(EMPTY);
-                            }
-
-                            spacerLine.Append(EMPTY);
-                        }
-                        else
-                        {
-                            spacerLine.Append("  ");
-                        }
-
-                        // Add east wall at the end of room sections
-                        if (x == map.Width - 1 || (cell != null && !cell.IsEmpty && (rightCell == null || rightCell.IsEmpty)))
-                        {
-                            if (cell != null && !cell.IsEmpty)
-                            {
-                                bool hasEastWall = cell.HasEastWall || (rightCell == null || rightCell.IsEmpty);
-                                if (hasEastWall)
-                                {
-                                    spacerLine.Append(ColoredWall(WALL_VERTICAL));
-                                }
-                            }
-                        }
+                        sb.Append(coloredChar.Color)
+                          .Append(coloredChar.Char)
+                          .Append(RESET);
                     }
-                    sb.AppendLine(spacerLine.ToString());
+                    else
+                    {
+                        sb.Append(coloredChar.Char);
+                    }
                 }
+                sb.AppendLine();
             }
 
             return sb.ToString();
         }
 
-        private void RenderRow(DungeonMapData map, int y, StringBuilder sb)
+        private void RenderCell(ColoredChar[,] grid, int mapX, int mapY, CellData cell)
         {
-            var line1 = new StringBuilder();
-            var line2 = new StringBuilder();
+            // Convert map coordinates to grid coordinates
+            int baseX = mapX * 3;
+            int baseY = mapY * 2;
 
-            // Process each cell in the row
-            for (int x = 0; x < map.Width; x++)
+            // Render top line
+            if (cell.HasNorthWall)
             {
-                var cell = map.GetCell(x, y);
-                var leftCell = x > 0 ? map.GetCell(x - 1, y) : null;
-                var rightCell = x < map.Width - 1 ? map.GetCell(x + 1, y) : null;
-                var topCell = y < map.Height - 1 ? map.GetCell(x, y + 1) : null;
-                var bottomCell = y > 0 ? map.GetCell(x, y - 1) : null;
+                // Left corner or wall
+                grid[baseY + 1, baseX] = new ColoredChar(
+                    cell.HasWestWall ? CORNER_TOP_LEFT : WALL_HORIZONTAL,
+                    DARK_GREY
+                );
 
-                // Handle top line (walls and doors)
-                if (cell != null && !cell.IsEmpty)
+                // Middle section
+                grid[baseY + 1, baseX + 1] = new ColoredChar(
+                    cell.HasNorthDoor ? DOOR_HORIZONTAL : WALL_HORIZONTAL,
+                    cell.HasNorthDoor ? BROWN : DARK_GREY
+                );
+
+                // Right corner or wall
+                grid[baseY + 1, baseX + 2] = new ColoredChar(
+                    cell.HasEastWall ? CORNER_TOP_RIGHT : WALL_HORIZONTAL,
+                    DARK_GREY
+                );
+            }
+            else
+            {
+                // Vertical walls if no north wall
+                if (cell.HasWestWall)
                 {
-                    // Check if this is part of a wall
-                    bool isWallStart = leftCell == null || leftCell.IsEmpty;
-                    bool isWallEnd = rightCell == null || rightCell.IsEmpty;
-                    bool hasNorthWall = cell.HasNorthWall || (topCell == null || topCell.IsEmpty);
-
-                    if (hasNorthWall && isWallStart)
-                    {
-                        line1.Append(ColoredWall(CORNER_TOP_LEFT));
-                    }
-                    else if (hasNorthWall)
-                    {
-                        line1.Append(ColoredWall(WALL_HORIZONTAL));
-                    }
-                    else
-                    {
-                        line1.Append(EMPTY);
-                    }
-
-                    if (cell.HasNorthDoor)
-                    {
-                        line1.Append(ColoredDoor(DOOR_HORIZONTAL));
-                    }
-                    else if (hasNorthWall)
-                    {
-                        line1.Append(ColoredWall(WALL_HORIZONTAL));
-                    }
-                    else
-                    {
-                        line1.Append(EMPTY);
-                    }
-
-                    // Add top-right corner if this is the end of a room section
-                    if (hasNorthWall && isWallEnd)
-                    {
-                        line1.Append(ColoredWall(CORNER_TOP_RIGHT));
-                    }
+                    grid[baseY + 1, baseX] = new ColoredChar(WALL_VERTICAL, DARK_GREY);
                 }
-                else
+                if (cell.HasEastWall)
                 {
-                    line1.Append("  ");
-                }
-
-                // Handle bottom line (floor and vertical walls/doors)
-                if (cell != null && !cell.IsEmpty)
-                {
-                    bool hasWestWall = cell.HasWestWall || (leftCell == null || leftCell.IsEmpty);
-                    if (hasWestWall)
-                    {
-                        line2.Append(cell.HasWestDoor ? ColoredDoor(DOOR_VERTICAL) : ColoredWall(WALL_VERTICAL));
-                    }
-                    else
-                    {
-                        line2.Append(EMPTY);
-                    }
-
-                    line2.Append(cell.IsPassable ? ColoredFloor(FLOOR) : EMPTY);
-                }
-                else
-                {
-                    line2.Append("  ");
-                }
-
-                // Add east wall at the end of room sections
-                if (x == map.Width - 1 || (cell != null && !cell.IsEmpty && (rightCell == null || rightCell.IsEmpty)))
-                {
-                    if (cell != null && !cell.IsEmpty)
-                    {
-                        bool hasEastWall = cell.HasEastWall || (rightCell == null || rightCell.IsEmpty);
-                        if (cell.HasEastDoor)
-                        {
-                            line2.Append(ColoredDoor(DOOR_VERTICAL));
-                        }
-                        else if (hasEastWall)
-                        {
-                            line2.Append(ColoredWall(WALL_VERTICAL));
-                        }
-                    }
+                    grid[baseY + 1, baseX + 2] = new ColoredChar(WALL_VERTICAL, DARK_GREY);
                 }
             }
 
-            // Only append line1 if it's not empty or if it's the top row
-            if (y == map.Height - 1 || line1.ToString().Trim().Length > 0)
+            // Render bottom line
+            // Left wall or door
+            if (cell.HasWestWall)
             {
-                sb.AppendLine(line1.ToString());
+                grid[baseY, baseX] = new ColoredChar(
+                    cell.HasWestDoor ? DOOR_VERTICAL : WALL_VERTICAL,
+                    cell.HasWestDoor ? BROWN : DARK_GREY
+                );
             }
-            sb.AppendLine(line2.ToString());
 
-            // If this is the bottom row or we're at the bottom of a room section, add the south wall
-            if (y == 0 || HasSouthWallInRow(map, y))
+            // Floor
+            grid[baseY, baseX + 1] = new ColoredChar(
+                cell.IsPassable ? FLOOR : EMPTY,
+                cell.IsPassable ? WHITE : null
+            );
+
+            // Right wall or door
+            if (cell.HasEastWall)
             {
-                var bottomLine = new StringBuilder();
-                for (int x = 0; x < map.Width; x++)
-                {
-                    var cell = map.GetCell(x, y);
-                    var leftCell = x > 0 ? map.GetCell(x - 1, y) : null;
-                    var rightCell = x < map.Width - 1 ? map.GetCell(x + 1, y) : null;
-
-                    if (cell != null && !cell.IsEmpty && (cell.HasSouthWall || y == 0))
-                    {
-                        bool isWallStart = leftCell == null || leftCell.IsEmpty;
-                        if (isWallStart)
-                        {
-                            bottomLine.Append(ColoredWall(CORNER_BOTTOM_LEFT));
-                        }
-                        else
-                        {
-                            bottomLine.Append(ColoredWall(WALL_HORIZONTAL));
-                        }
-
-                        if (cell.HasSouthDoor)
-                        {
-                            bottomLine.Append(ColoredDoor(DOOR_HORIZONTAL));
-                        }
-                        else
-                        {
-                            bottomLine.Append(ColoredWall(WALL_HORIZONTAL));
-                        }
-
-                        bool isWallEnd = rightCell == null || rightCell.IsEmpty;
-                        if (isWallEnd)
-                        {
-                            bottomLine.Append(ColoredWall(CORNER_BOTTOM_RIGHT));
-                        }
-                    }
-                    else
-                    {
-                        bottomLine.Append("  ");
-                    }
-                }
-                if (bottomLine.Length > 0)
-                {
-                    sb.AppendLine(bottomLine.ToString());
-                }
+                grid[baseY, baseX + 2] = new ColoredChar(
+                    cell.HasEastDoor ? DOOR_VERTICAL : WALL_VERTICAL,
+                    cell.HasEastDoor ? BROWN : DARK_GREY
+                );
             }
-        }
 
-        private bool HasSouthWallInRow(DungeonMapData map, int y)
-        {
-            if (y <= 0) return false;
-            for (int x = 0; x < map.Width; x++)
+            // Render south wall if needed
+            if (cell.HasSouthWall)
             {
-                var cell = map.GetCell(x, y);
-                var bottomCell = map.GetCell(x, y - 1);
-                if (cell != null && !cell.IsEmpty && (bottomCell == null || bottomCell.IsEmpty))
-                {
-                    return true;
-                }
+                // Left corner or wall
+                grid[baseY, baseX] = new ColoredChar(
+                    cell.HasWestWall ? CORNER_BOTTOM_LEFT : WALL_HORIZONTAL,
+                    DARK_GREY
+                );
+
+                // Middle section
+                grid[baseY, baseX + 1] = new ColoredChar(
+                    cell.HasSouthDoor ? DOOR_HORIZONTAL : WALL_HORIZONTAL,
+                    cell.HasSouthDoor ? BROWN : DARK_GREY
+                );
+
+                // Right corner or wall
+                grid[baseY, baseX + 2] = new ColoredChar(
+                    cell.HasEastWall ? CORNER_BOTTOM_RIGHT : WALL_HORIZONTAL,
+                    DARK_GREY
+                );
             }
-            return false;
         }
     }
 } 

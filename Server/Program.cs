@@ -79,7 +79,9 @@ namespace VibeMUC.Server
             Console.WriteLine("  clients  - List connected clients");
             Console.WriteLine("  maps     - List loaded maps");
             Console.WriteLine("  newmap   - Create a new test map");
-            Console.WriteLine("  genmap   - Generate a new map with parameters (genmap [width] [height] [minRooms] [maxRooms] [seed])");
+            Console.WriteLine("  genmap   - Generate a new map with parameters:");
+            Console.WriteLine("             genmap [type] [width] [height] [minRooms] [maxRooms] [seed]");
+            Console.WriteLine("             type: 'room' or 'passage' (default: passage)");
             Console.WriteLine("  showmap  - Display the current map in ASCII format");
             Console.WriteLine("  exit     - Stop server and exit");
             Console.WriteLine();
@@ -98,7 +100,9 @@ namespace VibeMUC.Server
                         Console.WriteLine("  clients  - List connected clients");
                         Console.WriteLine("  maps     - List loaded maps");
                         Console.WriteLine("  newmap   - Create a new test map");
-                        Console.WriteLine("  genmap   - Generate a new map with parameters (genmap [width] [height] [minRooms] [maxRooms] [seed])");
+                        Console.WriteLine("  genmap   - Generate a new map with parameters:");
+                        Console.WriteLine("             genmap [type] [width] [height] [minRooms] [maxRooms] [seed]");
+                        Console.WriteLine("             type: 'room' or 'passage' (default: passage)");
                         Console.WriteLine("  showmap  - Display the current map in ASCII format");
                         Console.WriteLine("  exit     - Stop server and exit");
                         break;
@@ -132,12 +136,15 @@ namespace VibeMUC.Server
                         {
                             try
                             {
-                                // Parse parameters with defaults
-                                int width = args.Length > 1 && int.TryParse(args[1], out int w) ? w : 30;
-                                int height = args.Length > 2 && int.TryParse(args[2], out int h) ? h : 30;
-                                int minRooms = args.Length > 3 && int.TryParse(args[3], out int min) ? min : 5;
-                                int maxRooms = args.Length > 4 && int.TryParse(args[4], out int max) ? max : 8;
-                                int? seed = args.Length > 5 && int.TryParse(args[5], out int s) ? s : null;
+                                // Parse generator type (default to passage)
+                                string generatorType = args.Length > 1 ? args[1].ToLower() : "passage";
+                                
+                                // Shift other parameters based on type parameter
+                                int width = args.Length > 2 && int.TryParse(args[2], out int w) ? w : 30;
+                                int height = args.Length > 3 && int.TryParse(args[3], out int h) ? h : 30;
+                                int minRooms = args.Length > 4 && int.TryParse(args[4], out int min) ? min : 5;
+                                int maxRooms = args.Length > 5 && int.TryParse(args[5], out int max) ? max : 8;
+                                int? seed = args.Length > 6 && int.TryParse(args[6], out int s) ? s : null;
 
                                 // Validate parameters
                                 if (width < 10 || height < 10)
@@ -151,9 +158,25 @@ namespace VibeMUC.Server
                                     break;
                                 }
 
-                                // Generate the map
-                                var generator = new DungeonMapGenerator(width, height, seed);
-                                var mapData = generator.Generate(minRooms, maxRooms);
+                                // Create appropriate generator
+                                IDungeonGenerator generator;
+                                DungeonMapData mapData;
+                                switch (generatorType)
+                                {
+                                    case "room":
+                                        generator = new RoomDungeonGenerator();
+                                        mapData = generator.Generate(width, height, seed);
+                                        break;
+                                    case "passage":
+                                        // DungeonMapGenerator doesn't implement IDungeonGenerator
+                                        var passageGen = new DungeonMapGenerator(width, height, seed);
+                                        mapData = passageGen.Generate(minRooms, maxRooms);
+                                        generator = null; // For name display
+                                        break;
+                                    default:
+                                        Console.WriteLine("Invalid generator type. Use 'room' or 'passage'.");
+                                        return;
+                                }
                                 
                                 // Find next available map ID
                                 int mapId = _server.GetNextMapId();
@@ -161,6 +184,7 @@ namespace VibeMUC.Server
                                 _server.CurrentMapId = mapId;  // Set as current map
                                 
                                 Console.WriteLine($"Generated new map with ID: {mapId} (Current Map)");
+                                Console.WriteLine($"Generator: {generator?.Name ?? "Passage-based Generator"}");
                                 Console.WriteLine($"Parameters: {width}x{height}, Rooms: {minRooms}-{maxRooms}" + 
                                                 (seed.HasValue ? $", Seed: {seed}" : ""));
                                 Console.WriteLine();
@@ -218,28 +242,46 @@ namespace VibeMUC.Server
             var cells = new CellData[width * height];
             for (int i = 0; i < cells.Length; i++)
             {
-                int x = i % width;
-                int y = i / width;
-                
-                bool isEdge = x == 0 || x == width - 1 || y == 0 || y == height - 1;
-                bool isRoom1 = x >= 3 && x <= 7 && y >= 3 && y <= 7;
-                bool isRoom2 = x >= 9 && x <= 13 && y >= 3 && y <= 7;
-                bool isCorridor = x >= 7 && x <= 9 && y == 5;
-
-                cells[i] = new CellData
-                {
-                    IsPassable = !isEdge && (isRoom1 || isRoom2 || isCorridor),
-                    HasNorthWall = y < height - 1 && (isEdge || (y == 7 && (isRoom1 || isRoom2))),
-                    HasSouthWall = y > 0 && (isEdge || (y == 3 && (isRoom1 || isRoom2))),
-                    HasEastWall = x < width - 1 && (isEdge || (x == 7 && !isCorridor) || (x == 13 && isRoom2)),
-                    HasWestWall = x > 0 && (isEdge || (x == 3 && isRoom1) || (x == 9 && !isCorridor)),
-                    // Add doors at the corridor entrances
-                    HasEastDoor = x == 7 && y == 5,
-                    HasWestDoor = x == 9 && y == 5
+                cells[i] = new CellData 
+                { 
+                    IsEmpty = true,
+                    IsPassable = false,
+                    HasNorthWall = false,
+                    HasSouthWall = false,
+                    HasEastWall = false,
+                    HasWestWall = false
                 };
             }
 
-            var map = new DungeonMapData
+            // Create a single room
+            int roomX = 5;
+            int roomY = 5;
+            int roomWidth = 5;
+            int roomHeight = 5;
+
+            // Fill in room cells
+            for (int y = roomY; y < roomY + roomHeight; y++)
+            {
+                for (int x = roomX; x < roomX + roomWidth; x++)
+                {
+                    int index = y * width + x;
+                    cells[index] = new CellData
+                    {
+                        IsEmpty = false,
+                        IsPassable = true,
+                        HasNorthWall = y == roomY + roomHeight - 1,
+                        HasSouthWall = y == roomY,
+                        HasEastWall = x == roomX + roomWidth - 1,
+                        HasWestWall = x == roomX,
+                        HasNorthDoor = y == roomY + roomHeight - 1 && x == roomX + roomWidth / 2,
+                        HasSouthDoor = y == roomY && x == roomX + roomWidth / 2,
+                        HasEastDoor = x == roomX + roomWidth - 1 && y == roomY + roomHeight / 2,
+                        HasWestDoor = x == roomX && y == roomY + roomHeight / 2
+                    };
+                }
+            }
+
+            return new DungeonMapData
             {
                 Width = width,
                 Height = height,
@@ -247,8 +289,6 @@ namespace VibeMUC.Server
                 FloorLevel = 1,
                 Cells = cells
             };
-
-            return map;
         }
     }
 } 
