@@ -81,7 +81,7 @@ namespace VibeMUC.Server
             Console.WriteLine("  newmap   - Create a new test map");
             Console.WriteLine("  genmap   - Generate a new map with parameters:");
             Console.WriteLine("             genmap [type] [width] [height] [minRooms] [maxRooms] [seed]");
-            Console.WriteLine("             type: 'room' or 'passage' (default: passage)");
+            Console.WriteLine("             type: 'room', 'passage', or 'walk' (default: passage)");
             Console.WriteLine("  showmap  - Display the current map in ASCII format");
             Console.WriteLine("  exit     - Stop server and exit");
             Console.WriteLine();
@@ -102,7 +102,7 @@ namespace VibeMUC.Server
                         Console.WriteLine("  newmap   - Create a new test map");
                         Console.WriteLine("  genmap   - Generate a new map with parameters:");
                         Console.WriteLine("             genmap [type] [width] [height] [minRooms] [maxRooms] [seed]");
-                        Console.WriteLine("             type: 'room' or 'passage' (default: passage)");
+                        Console.WriteLine("             type: 'room', 'passage', or 'walk' (default: passage)");
                         Console.WriteLine("  showmap  - Display the current map in ASCII format");
                         Console.WriteLine("  exit     - Stop server and exit");
                         break;
@@ -167,6 +167,10 @@ namespace VibeMUC.Server
                                         generator = new RoomDungeonGenerator();
                                         mapData = generator.Generate(width, height, seed);
                                         break;
+                                    case "walk":
+                                        generator = new RandomWalkDungeonGenerator();
+                                        mapData = generator.Generate(width, height, seed);
+                                        break;
                                     case "passage":
                                         // DungeonMapGenerator doesn't implement IDungeonGenerator
                                         var passageGen = new DungeonMapGenerator(width, height, seed);
@@ -174,7 +178,7 @@ namespace VibeMUC.Server
                                         generator = null; // For name display
                                         break;
                                     default:
-                                        Console.WriteLine("Invalid generator type. Use 'room' or 'passage'.");
+                                        Console.WriteLine("Invalid generator type. Use 'room', 'passage', or 'walk'.");
                                         return;
                                 }
                                 

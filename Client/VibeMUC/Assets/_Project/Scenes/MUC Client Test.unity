@@ -1161,7 +1161,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 13bde0e959ccdcc42aa74564065d4bce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _gridSize: {x: 20, y: 20}
+  _gridSize: {x: 30, y: 30}
   _cellPrefab: {fileID: 7476175237016643093, guid: d73aa69e4a89b3f4fb620079a47509f2, type: 3}
 --- !u!4 &1786951223
 Transform:
