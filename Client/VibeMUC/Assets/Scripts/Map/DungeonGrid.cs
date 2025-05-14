@@ -20,6 +20,18 @@ namespace VibeMUC.Map
             InitializeGrid();
         }
 
+        public void ResizeGrid(int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                Debug.LogError($"Invalid grid dimensions: {width}x{height}");
+                return;
+            }
+
+            _gridSize = new Vector2Int(width, height);
+            InitializeGrid();
+        }
+
         private void InitializeGrid()
         {
             // Clear existing cells if any

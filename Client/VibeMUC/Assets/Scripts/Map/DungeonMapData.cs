@@ -108,10 +108,17 @@ namespace VibeMUC.Map
         // Apply map data to a DungeonGrid
         public void ApplyToDungeonGrid(DungeonGrid grid)
         {
+            if (grid == null)
+            {
+                Debug.LogError("Cannot apply map data to null grid");
+                return;
+            }
+
+            // Resize the grid if dimensions don't match
             if (grid.GridSize.x != Width || grid.GridSize.y != Height)
             {
-                Debug.LogError($"Grid size mismatch. Map is {Width}x{Height} but grid is {grid.GridSize.x}x{grid.GridSize.y}");
-                return;
+                Debug.Log($"Resizing grid from {grid.GridSize.x}x{grid.GridSize.y} to {Width}x{Height}");
+                grid.ResizeGrid(Width, Height);
             }
 
             Debug.Log($"Applying map data: {Width}x{Height}, {Cells.Length} cells");
@@ -142,17 +149,13 @@ namespace VibeMUC.Map
                                 west: cellData.HasWestWall     // West stays the same
                             );
 
-                            // Then set doors - using the same coordinate system conversion
+                            // Then set doors
                             cell.SetDoors(
-                                north: cellData.HasNorthDoor,  // Unity North = Grid North
-                                east: cellData.HasEastDoor,    // East stays the same
-                                south: cellData.HasSouthDoor,  // Unity South = Grid South
-                                west: cellData.HasWestDoor     // West stays the same
+                                north: cellData.HasNorthDoor,
+                                east: cellData.HasEastDoor,
+                                south: cellData.HasSouthDoor,
+                                west: cellData.HasWestDoor
                             );
-
-                            Debug.Log($"Cell {x},{y} updated: " +
-                                    $"walls(N,E,S,W)={cell.HasNorthWall},{cell.HasEastWall},{cell.HasSouthWall},{cell.HasWestWall} " +
-                                    $"doors(N,E,S,W)={cell.HasNorthDoor},{cell.HasEastDoor},{cell.HasSouthDoor},{cell.HasWestDoor}");
                         }
                     }
                 }

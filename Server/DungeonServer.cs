@@ -31,6 +31,11 @@ namespace VibeMUC.Server
                 if (_maps.ContainsKey(value))
                 {
                     _currentMapId = value;
+                    // Broadcast the map update to all clients
+                    if (_maps.TryGetValue(value, out var map))
+                    {
+                        BroadcastMapUpdateAsync(map).ConfigureAwait(false);
+                    }
                 }
                 else
                 {
@@ -304,11 +309,49 @@ namespace VibeMUC.Server
             {
                 _currentMapId = id;
             }
+            // Broadcast the map update to all clients
+            BroadcastMapUpdateAsync(map).ConfigureAwait(false);
         }
 
         public DungeonMapData? GetMap(int id)
         {
             return _maps.TryGetValue(id, out var map) ? map : null;
+        }
+
+        private async Task BroadcastMapUpdateAsync(DungeonMapData mapData)
+        {
+            Console.WriteLine("Broadcasting map update to all clients...");
+            List<ClientConnection> clientsToRemove = new();
+
+            lock (_clientLock)
+            {
+                foreach (var client in _clients)
+                {
+                    try
+                    {
+                        if (client.IsConnected)
+                        {
+                            _ = SendMapToClientAsync(client, mapData);
+                        }
+                        else
+                        {
+                            clientsToRemove.Add(client);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error sending map to client {client.Id}: {ex.Message}");
+                        clientsToRemove.Add(client);
+                    }
+                }
+
+                // Remove any disconnected clients
+                foreach (var client in clientsToRemove)
+                {
+                    _clients.Remove(client);
+                    OnClientDisconnected?.Invoke(client);
+                }
+            }
         }
     }
 
